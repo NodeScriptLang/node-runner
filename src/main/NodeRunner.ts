@@ -36,15 +36,12 @@ export class NodeRunner {
         this.ensureCapacity();
     }
 
-    async stop(force = false) {
+    async stop() {
         this.running = false;
-        const workers = this.idleWorkers;
-        this.idleWorkers = [];
-        if (force) {
-            for (const worker of workers) {
-                worker.terminate();
-            }
+        for (const worker of this.idleWorkers) {
+            worker.terminate();
         }
+        this.idleWorkers = [];
     }
 
     async compute(task: ComputeTask) {

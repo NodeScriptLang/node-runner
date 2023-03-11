@@ -12,7 +12,7 @@ const runner = new NodeRunner({
 describe('NodeRunner', () => {
 
     beforeEach(() => runner.start());
-    afterEach(() => runner.stop(true));
+    afterEach(() => runner.stop());
 
     it('computes code', async () => {
         const res = await runner.compute({
