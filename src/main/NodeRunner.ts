@@ -74,6 +74,7 @@ export class NodeRunner {
             execArgv: [
                 '--experimental-network-imports',
                 '--experimental-global-webcrypto',
+                '--no-warnings',
             ],
             env: {},
         });
