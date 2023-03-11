@@ -16,7 +16,7 @@ export interface WorkerQueueConfig {
 /**
  * Maintains a queue of pre-spawned workers, ready to execute tasks in isolated subprocesses.
  */
-export class WorkerQueue {
+export class NodeRunner {
 
     onSpawn = new Event<{ type: 'backlog' | 'idle' }>();
 

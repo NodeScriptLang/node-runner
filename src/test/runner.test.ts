@@ -1,21 +1,21 @@
 import assert from 'assert';
 
 import { ComputeTask } from '../main/ComputeTask.js';
-import { WorkerQueue } from '../main/WorkerQueue.js';
+import { NodeRunner } from '../main/NodeRunner.js';
 
-const queue = new WorkerQueue({
+const runner = new NodeRunner({
     workersCount: 3,
     queueWaitTimeout: 50,
     workerKillTimeout: 1000,
 });
 
-describe('WorkerQueue', () => {
+describe('NodeRunner', () => {
 
-    beforeEach(() => queue.start());
-    afterEach(() => queue.stop(true));
+    beforeEach(() => runner.start());
+    afterEach(() => runner.stop(true));
 
     it('computes code', async () => {
-        const res = await queue.compute({
+        const res = await runner.compute({
             code: `export async function compute(params) { return "Hello, " + params.name; }`,
             params: {
                 name: 'World',
@@ -26,7 +26,7 @@ describe('WorkerQueue', () => {
     });
 
     it('does not allow accessing process global', async () => {
-        const res = await queue.compute({
+        const res = await runner.compute({
             code: `export async function compute(params) { return "Process: " + typeof process }`,
             params: {},
             timeout: 1000,
@@ -35,7 +35,7 @@ describe('WorkerQueue', () => {
     });
 
     it('does not allow accessing process via constructor.constructor hack', async () => {
-        const res = await queue.compute({
+        const res = await runner.compute({
             code: `export async function compute(params, ctx) {
                 const process = ctx.constructor.constructor("return process")();
                 return 'Process: '+ typeof process;
@@ -54,7 +54,7 @@ describe('WorkerQueue', () => {
                 timeout: 1000,
             };
         });
-        const results = await Promise.all(tasks.map(_ => queue.compute(_)));
+        const results = await Promise.all(tasks.map(_ => runner.compute(_)));
         assert.deepEqual(results, [
             'Hello 1',
             'Hello 2',
