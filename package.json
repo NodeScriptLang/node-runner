@@ -1,0 +1,50 @@
+{
+    "name": "@nodescript/node-runner",
+    "version": "0.0.0",
+    "description": "Node.js Module Runner",
+    "type": "module",
+    "sideEffects": false,
+    "exports": {
+        ".": "./out/main/index.js"
+    },
+    "main": "out/main/index.js",
+    "types": "out/main/index.d.ts",
+    "files": [
+        "out/main/**/*",
+        "out/bin/**/*"
+    ],
+    "scripts": {
+        "clean": "rm -rf out *.tsbuildinfo",
+        "dev": "npm run clean && tsc -b -w",
+        "compile": "npm run clean && tsc -b",
+        "lint": "eslint --ext=.js,.ts,.vue --cache .",
+        "test": "NODE_ENV=test mocha",
+        "version": "npm run compile",
+        "postversion": "npm publish --access=public && git push --tags origin main"
+    },
+    "pre-commit": [
+        "lint"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+ssh://git@github.com/nodescriptlang/node-runner.git"
+    },
+    "keywords": [],
+    "author": "Boris Okunskiy",
+    "license": "ISC",
+    "devDependencies": {
+        "@nodescript/eslint-config": "^1.0.3",
+        "@types/mocha": "^8.2.3",
+        "@types/node": "^18.13.0",
+        "dotenv": "^16.0.3",
+        "eslint": "^8.24.0",
+        "mocha": "^9.0.2",
+        "pre-commit": "^1.2.2",
+        "typescript": "^4.9.5"
+    },
+    "dependencies": {
+        "@nodescript/core": "^5.9.1",
+        "isomorphic-ws": "^5.0.0",
+        "nanoevent": "^1.0.0"
+    }
+}
