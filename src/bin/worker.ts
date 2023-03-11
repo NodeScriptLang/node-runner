@@ -1,6 +1,5 @@
 import { GraphEvalContext } from '@nodescript/core/runtime';
 import { evalEsmModule } from '@nodescript/core/util';
-import { webcrypto } from 'crypto';
 import WebSocket from 'isomorphic-ws';
 
 import { WorkerError } from '../main/errors.js';
@@ -8,9 +7,8 @@ import { WorkerError } from '../main/errors.js';
 const process = global.process;
 
 // Runtime globals
-(global as any).crypto = webcrypto as any;
-(global as any).WebSocket = WebSocket as any;
 (global as any).process = undefined;
+(global as any).WebSocket = WebSocket as any;
 
 try {
     const inputChunks: Buffer[] = [];

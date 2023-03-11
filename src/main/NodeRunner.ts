@@ -71,6 +71,10 @@ export class NodeRunner {
         const modulePath = this.getWorkerBinary();
         const process = fork(modulePath, {
             stdio: ['pipe', 'pipe', 'inherit', 'ipc'],
+            execArgv: [
+                '--experimental-network-imports',
+                '--experimental-global-webcrypto',
+            ],
             env: {},
         });
         const worker = new WorkerProcess(process, {
