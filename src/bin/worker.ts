@@ -21,7 +21,6 @@ try {
     const { compute } = await evalEsmModule(code);
     const result = await compute(params, ctx);
     sendOutput(result);
-    process.exit(0);
 } catch (error: any) {
     sendOutput({
         name: error.name,
