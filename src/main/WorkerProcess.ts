@@ -5,7 +5,7 @@ import { createConnection, Socket } from 'node:net';
 import { ComputeTask } from './ComputeTask.js';
 import { ComputeTimeoutError, WorkerError } from './errors.js';
 
-const READINESS_TIMEOUT = 1000;
+const READINESS_TIMEOUT = 5000;
 
 export class WorkerProcess {
 
@@ -100,13 +100,15 @@ export class WorkerProcess {
             return;
         }
         const timeoutAt = Date.now() + READINESS_TIMEOUT;
+        let i = 0;
         while (Date.now() < timeoutAt) {
             try {
+                i += 1;
                 await stat(this.socketFile);
                 this.ready = true;
                 return;
             } catch (error) {
-                await new Promise(r => setTimeout(r, 10));
+                await new Promise(r => setTimeout(r, 10 * i));
             }
         }
         throw new WorkerError('Timeout waiting for worker readiness');
