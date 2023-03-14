@@ -18,7 +18,6 @@ if (!socketFile) {
     nextTick,
 };
 (globalThis as any).WebSocket = WebSocket as any;
-Object.freeze(globalThis);
 
 // IPC server
 const server = createServer({
