@@ -23,6 +23,7 @@ export interface WorkerQueueConfig {
 export class NodeRunner {
 
     onSpawn = new Event<{ type: 'backlog' | 'idle' }>();
+    onRecycle = new Event<void>();
 
     private workerPool: WorkerProcess[] = [];
     private taskQueue: TaskCallback[] = [];
@@ -90,6 +91,7 @@ export class NodeRunner {
         } else {
             worker.terminate(this.config.workerKillTimeout);
             setTimeout(() => this.populatePool(), 0).unref();
+            this.onRecycle.emit();
         }
     }
 
