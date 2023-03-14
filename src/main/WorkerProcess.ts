@@ -1,85 +1,115 @@
-import { ChildProcess } from 'node:child_process';
-
-import { Event } from 'nanoevent';
+import { ChildProcess, fork } from 'node:child_process';
+import { stat } from 'node:fs/promises';
+import { createConnection, Socket } from 'node:net';
 
 import { ComputeTask } from './ComputeTask.js';
-import { ComputeTimeoutError } from './errors.js';
+import { ComputeTimeoutError, WorkerError } from './errors.js';
 
-export interface WorkerOptions {
-    killTimeout: number;
-}
+const READINESS_TIMEOUT = 1000;
 
 export class WorkerProcess {
 
-    private onFinish = new Event<void>();
-    private timer: any = null;
+    static create(socketFile: string) {
+        const modulePath = this.getWorkerBinary();
+        const process = fork(modulePath, [
+            socketFile,
+        ], {
+            stdio: 'inherit',
+            execArgv: [
+                '--experimental-network-imports',
+                '--experimental-global-webcrypto',
+                '--no-warnings',
+            ],
+            env: {},
+        });
+        const worker = new WorkerProcess(process, socketFile);
+        return worker;
+    }
+
+    static getWorkerBinary() {
+        return new URL('../bin/worker.js', import.meta.url).pathname;
+    }
+
+    ready = false;
+    tasksProcessed = 0;
 
     constructor(
         readonly process: ChildProcess,
-        readonly options: WorkerOptions,
-    ) { }
+        readonly socketFile: string,
+    ) {
+        process.once('exit', () => {
+            this.ready = false;
+        });
+    }
 
     async compute(task: ComputeTask) {
-        try {
-            this.sendPayload(task);
-            const res = await Promise.race([
-                this.waitForOutput(),
-                this.createTimeoutPromise(task.timeout),
-            ]);
-            this.onFinish.emit();
-            return res;
-        } finally {
-            this.terminate();
-        }
+        this.tasksProcessed += 1;
+        const { moduleUrl, params, timeout } = task;
+        const socket = await this.connect();
+        return new Promise((resolve, reject) => {
+            const payload = Buffer.from(JSON.stringify({ moduleUrl, params }), 'utf-8');
+            socket.end(payload);
+            const timer = setTimeout(() => {
+                const err = new ComputeTimeoutError('Allocated compute time exceeded');
+                reject(err);
+            }, timeout);
+            this.waitForOutput(socket).then(value => {
+                clearTimeout(timer);
+                resolve(value);
+            });
+            socket.once('error', error => {
+                clearTimeout(timer);
+                reject(error);
+            });
+        });
     }
 
-    private sendPayload(task: ComputeTask) {
-        // Simple protocol is used to send both code and params
-        // see bin/worker.ts for receiving end
-        const codeBuffer = Buffer.from(task.code, 'utf-8');
-        const paramsBuffer = Buffer.from(JSON.stringify(task.params), 'utf-8');
-        const data = Buffer.concat([
-            Buffer.from(String(codeBuffer.byteLength) + '\n'),
-            codeBuffer,
-            paramsBuffer,
-        ]);
-        this.process.stdin!.end(data);
+    async connect(): Promise<Socket> {
+        return new Promise((resolve, reject) => {
+            const sock = createConnection(this.socketFile);
+            sock.once('connect', () => resolve(sock));
+            sock.once('error', err => reject(err));
+        });
     }
 
-    private async waitForOutput() {
+    private async waitForOutput(socket: Socket) {
         const chunks: Buffer[] = [];
-        for await (const chunk of this.process.stdout!) {
+        for await (const chunk of socket) {
             chunks.push(chunk);
         }
         return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
     }
 
-    private createTimeoutPromise(timeout: number) {
-        return new Promise<void>((resolve, reject) => {
-            this.timer = setTimeout(() => {
-                reject(new ComputeTimeoutError('Allocated compute time exceeded'));
-            }, timeout).unref();
-            this.onFinish.once(() => {
-                clearTimeout(this.timer);
-                this.timer = null;
-                resolve();
+    terminate(killTimeout = 60_000) {
+        const { process } = this;
+        if (process.exitCode == null) {
+            const killTimer = setTimeout(() => {
+                if (process.exitCode == null) {
+                    process.kill('SIGKILL');
+                }
+            }, killTimeout).unref();
+            process.once('exit', () => {
+                clearTimeout(killTimer);
             });
-        });
+            process.kill('SIGTERM');
+        }
     }
 
-    terminate() {
-        if (this.process.exitCode != null) {
+    async waitForReady() {
+        if (this.ready) {
             return;
         }
-        const killTimer = setTimeout(() => {
-            if (this.process.exitCode == null) {
-                this.process.kill('SIGKILL');
+        const timeoutAt = Date.now() + READINESS_TIMEOUT;
+        while (Date.now() < timeoutAt) {
+            try {
+                await stat(this.socketFile);
+                this.ready = true;
+                return;
+            } catch (error) {
+                await new Promise(r => setTimeout(r, 10));
             }
-        }).unref();
-        this.process.once('exit', () => {
-            clearTimeout(killTimer);
-        });
-        this.process.kill('SIGTERM');
+        }
+        throw new WorkerError('Timeout waiting for worker readiness');
     }
 
 }

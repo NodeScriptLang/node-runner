@@ -1,11 +1,9 @@
+import { createServer, Socket } from 'node:net';
+
 import { GraphEvalContext } from '@nodescript/core/runtime';
-import { evalEsmModule } from '@nodescript/core/util';
 import WebSocket from 'isomorphic-ws';
-import { createServer } from 'net';
-import { Readable } from 'stream';
 
 import { WorkerError } from '../main/errors.js';
-import { consumeChunkedStream } from '../shared/stream.js';
 
 const process = global.process;
 const socketFile = process.argv.at(-1) ?? '';
@@ -17,51 +15,52 @@ if (!socketFile) {
 (global as any).process = undefined;
 (global as any).WebSocket = WebSocket as any;
 
-// const server = createServer(async client => {
-//     for await (const payload of consumeChunkedStream(client)) {
-//
-//     }
-// });
+// IPC server
+const server = createServer({
+    allowHalfOpen: true,
+}, serveClient);
+server.listen(socketFile);
 
-try {
-    const inputChunks: Buffer[] = [];
-    for await (const chunk of process.stdin) {
-        inputChunks.push(chunk);
-    }
-    const inputBuffer = Buffer.concat(inputChunks);
-    const { code, params } = parseInput(inputBuffer);
-    const ctx = new GraphEvalContext();
-    const { compute } = await evalEsmModule(code);
-    const result = await compute(params, ctx);
-    sendOutput(result);
-} catch (error: any) {
-    sendOutput({
-        name: error.name,
-        message: error.message,
-        status: error.status,
+// Graceful termination
+process.once('SIGTERM', () => {
+    server.close(() => {
+        process.exit(0);
     });
-    process.exit(1);
+});
+
+async function serveClient(socket: Socket) {
+    try {
+        const payload = await readStream(socket);
+        const {
+            moduleUrl,
+            params,
+        } = JSON.parse(payload);
+        const { compute } = await import(moduleUrl);
+        const ctx = new GraphEvalContext();
+        const result = await compute(params, ctx);
+        const output = Buffer.from(JSON.stringify(result), 'utf-8');
+        socket.end(output, () => socket.destroy());
+    } catch (error: any) {
+        socket.end(Buffer.from(JSON.stringify({
+            name: error.name,
+            message: error.message,
+            status: error.status,
+        }), 'utf-8'), () => socket.destroy());
+    }
 }
 
-function parseInput(input: Buffer) {
-    const i = input.indexOf('\n');
-    if (i === -1) {
-        throw new WorkerError('Invalid input payload, expected <codeLength>\\n');
-    }
-    const codeLengthBuffer = input.subarray(0, i);
-    const codeLength = Number(codeLengthBuffer.toString('utf-8'));
-    if (!codeLength) {
-        throw new WorkerError('Invalid input payload, expected non-zero <codeLength>\\n');
-    }
-    const codeBuffer = input.subarray(i + 1, i + 1 + codeLength);
-    const paramsBuffer = input.subarray(i + 1 + codeLength);
-    return {
-        code: codeBuffer.toString('utf-8'),
-        params: JSON.parse(paramsBuffer.toString('utf-8')),
-    };
-}
-
-function sendOutput(result: any) {
-    const buf = Buffer.from(JSON.stringify(result), 'utf-8');
-    process.stdout.end(buf);
+async function readStream(socket: Socket): Promise<string> {
+    // Note reading with for await destroys the writeable stream for some reason
+    return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        socket.on('data', chunk => {
+            chunks.push(chunk);
+        });
+        socket.on('end', () => {
+            resolve(Buffer.concat(chunks).toString('utf-8'));
+        });
+        socket.on('error', err => {
+            reject(err);
+        });
+    });
 }
