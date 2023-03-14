@@ -43,10 +43,12 @@ export class NodeRunner {
 
     async stop() {
         this.running = false;
-        for (const worker of this.workerPool) {
+        const workers = this.workerPool;
+        this.workerPool = [];
+        for (const worker of workers) {
             worker.terminate(this.config.workerKillTimeout);
         }
-        this.workerPool = [];
+        await Promise.all(workers.map(_ => _.waitForTerminate()));
     }
 
     async compute(task: ComputeTask) {
@@ -56,7 +58,6 @@ export class NodeRunner {
             return await worker.compute(task);
         }
         return await this.createDeferredTask(task);
-
     }
 
     private async populatePool() {
@@ -72,6 +73,14 @@ export class NodeRunner {
         const socketFile = path.join(this.config.workDir, id + '.sock');
         const worker = WorkerProcess.create(socketFile);
         this.workerPool.push(worker);
+        // If we have a backlog of tasks, allocate workers for them first
+        const queued = this.taskQueue.shift();
+        if (queued) {
+            queued(worker);
+            this.onSpawn.emit({ type: 'backlog' });
+        } else {
+            this.onSpawn.emit({ type: 'idle' });
+        }
     }
 
     private grabWorker(): WorkerProcess | null {

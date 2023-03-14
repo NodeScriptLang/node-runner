@@ -114,4 +114,13 @@ export class WorkerProcess {
         throw new WorkerError('Timeout waiting for worker readiness');
     }
 
+    async waitForTerminate() {
+        return new Promise<void>(resolve => {
+            if (!this.ready || this.process.exitCode != null) {
+                return resolve();
+            }
+            this.process.once('exit', () => resolve());
+        });
+    }
+
 }
