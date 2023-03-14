@@ -1,5 +1,5 @@
 export interface ComputeTask {
-    code: string;
+    moduleUrl: string;
     params: any;
     timeout: number;
 }

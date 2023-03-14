@@ -45,6 +45,7 @@
     "dependencies": {
         "@nodescript/core": "^5.9.1",
         "isomorphic-ws": "^5.0.0",
+        "nanochunk": "^1.0.0",
         "nanoevent": "^1.0.0"
     }
 }
