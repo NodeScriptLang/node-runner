@@ -9,7 +9,7 @@ const READINESS_TIMEOUT = 5000;
 
 export class WorkerProcess {
 
-    static create(socketFile: string) {
+    static async create(socketFile: string) {
         const modulePath = this.getWorkerBinary();
         const process = fork(modulePath, [
             socketFile,
@@ -23,6 +23,7 @@ export class WorkerProcess {
             env: {},
         });
         const worker = new WorkerProcess(process, socketFile);
+        await worker.waitForReady();
         return worker;
     }
 
@@ -81,6 +82,10 @@ export class WorkerProcess {
     }
 
     terminate(killTimeout = 60_000) {
+        if (!this.ready) {
+            return;
+        }
+        this.ready = false;
         const { process } = this;
         if (process.exitCode == null) {
             const killTimer = setTimeout(() => {
@@ -95,7 +100,7 @@ export class WorkerProcess {
         }
     }
 
-    async waitForReady() {
+    private async waitForReady() {
         if (this.ready) {
             return;
         }

@@ -3,6 +3,11 @@ export class WorkerError extends Error {
     override name = this.constructor.name;
 }
 
+export class InvalidStateError extends Error {
+    status = 500;
+    override name = this.constructor.name;
+}
+
 export class ComputeTimeoutError extends Error {
     status = 408;
     override name = this.constructor.name;

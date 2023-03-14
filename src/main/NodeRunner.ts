@@ -4,10 +4,8 @@ import { mkdir } from 'fs/promises';
 import { Event } from 'nanoevent';
 
 import { ComputeTask } from './ComputeTask.js';
-import { QueueTimeoutError } from './errors.js';
+import { InvalidStateError } from './errors.js';
 import { WorkerProcess } from './WorkerProcess.js';
-
-type TaskCallback = (worker: WorkerProcess) => void;
 
 export interface WorkerQueueConfig {
     workDir: string;
@@ -22,12 +20,12 @@ export interface WorkerQueueConfig {
  */
 export class NodeRunner {
 
-    onSpawn = new Event<{ type: 'backlog' | 'idle' }>();
+    onSpawn = new Event<void>();
     onRecycle = new Event<void>();
 
     private workerPool: WorkerProcess[] = [];
-    private taskQueue: TaskCallback[] = [];
     private running = false;
+    private populating = false;
 
     constructor(
         readonly config: WorkerQueueConfig,
@@ -38,6 +36,7 @@ export class NodeRunner {
             return;
         }
         this.running = true;
+        await mkdir(this.config.workDir, { recursive: true });
         await this.populatePool();
     }
 
@@ -52,77 +51,64 @@ export class NodeRunner {
     }
 
     async compute(task: ComputeTask) {
-        const worker = this.grabWorker();
-        if (worker) {
-            this.recycleWorker(worker);
-            return await worker.compute(task);
+        if (!this.running) {
+            throw new InvalidStateError('Cannot compute: runner is not ready');
         }
-        return await this.createDeferredTask(task);
+        const worker = await this.grabWorker();
+        return await worker.compute(task);
+    }
+
+    private async grabWorker(): Promise<WorkerProcess> {
+        while (true) {
+            const worker = this.workerPool.shift();
+            if (!worker) {
+                // Edge case: pool is drained, so wait synchronously for the pool to be re-populated
+                await this.populatePool();
+                continue;
+            }
+            if (!worker.ready) {
+                // Just grab the next one
+                this.populateInBackground();
+                continue;
+            }
+            if (worker.tasksProcessed > this.config.workerRecycleThreshold) {
+                worker.terminate(this.config.workerKillTimeout);
+                this.populateInBackground();
+                this.onRecycle.emit();
+                continue;
+            }
+            this.workerPool.push(worker);
+            return worker;
+        }
+    }
+
+    private populateInBackground() {
+        setTimeout(() => this.populatePool(), 0).unref();
     }
 
     private async populatePool() {
-        await mkdir(this.config.workDir, { recursive: true });
-        while (this.workerPool.length < this.config.workerPoolSize) {
-            this.spawnWorker();
+        if (this.populating) {
+            return;
         }
-        await Promise.all(this.workerPool.map(_ => _.waitForReady()));
+        this.populating = true;
+        try {
+            const promises: Promise<WorkerProcess>[] = [];
+            for (let i = this.workerPool.length; i < this.config.workerPoolSize; i++) {
+                promises.push(this.spawnWorker());
+            }
+            const workers = await Promise.all(promises);
+            this.workerPool.push(...workers);
+        } finally {
+            this.populating = false;
+        }
     }
 
-    private spawnWorker() {
+    private async spawnWorker() {
         const id = Math.random().toString(16).substring(2);
         const socketFile = path.join(this.config.workDir, id + '.sock');
-        const worker = WorkerProcess.create(socketFile);
-        this.workerPool.push(worker);
-        // If we have a backlog of tasks, allocate workers for them first
-        const queued = this.taskQueue.shift();
-        if (queued) {
-            queued(worker);
-            this.onSpawn.emit({ type: 'backlog' });
-        } else {
-            this.onSpawn.emit({ type: 'idle' });
-        }
+        const worker = await WorkerProcess.create(socketFile);
+        this.onSpawn.emit();
+        return worker;
     }
 
-    private grabWorker(): WorkerProcess | null {
-        while (this.workerPool.length > 0) {
-            const worker = this.workerPool.shift()!;
-            if (!worker.ready) {
-                return null;
-            }
-            return worker;
-        }
-        return null;
-    }
-
-    private recycleWorker(worker: WorkerProcess) {
-        if (worker.tasksProcessed < this.config.workerRecycleThreshold) {
-            this.workerPool.push(worker);
-        } else {
-            worker.terminate(this.config.workerKillTimeout);
-            setTimeout(() => this.populatePool(), 0).unref();
-            this.onRecycle.emit();
-        }
-    }
-
-    private createDeferredTask(task: ComputeTask) {
-        return new Promise((resolve, reject) => {
-            const callback: TaskCallback = worker => {
-                clearTimeout(timer);
-                worker.compute(task).then(resolve, reject);
-            };
-            const timer = setTimeout(() => {
-                reject(new QueueTimeoutError('Exceeded timeout waiting for a worker, please try again later.'));
-                remove(this.taskQueue, callback);
-            }, this.config.queueWaitTimeout);
-            this.taskQueue.push(callback);
-        });
-    }
-
-}
-
-function remove<T>(arr: T[], item: T) {
-    const i = arr.indexOf(item);
-    if (i > -1) {
-        arr.splice(i, 1);
-    }
 }
