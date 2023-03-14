@@ -12,8 +12,13 @@ if (!socketFile) {
 }
 
 // Runtime globals
-(global as any).process = undefined;
-(global as any).WebSocket = WebSocket as any;
+(globalThis as any).process = {
+    // Note: those are required by isomorphic-ws
+    env: {},
+    nextTick,
+};
+(globalThis as any).WebSocket = WebSocket as any;
+Object.freeze(globalThis);
 
 // IPC server
 const server = createServer({
@@ -63,4 +68,8 @@ async function readStream(socket: Socket): Promise<string> {
             reject(err);
         });
     });
+}
+
+function nextTick(callback: Function, ...args: any[]) {
+    process.nextTick(callback, ...args);
 }
