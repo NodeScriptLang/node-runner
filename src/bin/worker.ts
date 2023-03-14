@@ -1,14 +1,27 @@
 import { GraphEvalContext } from '@nodescript/core/runtime';
 import { evalEsmModule } from '@nodescript/core/util';
 import WebSocket from 'isomorphic-ws';
+import { createServer } from 'net';
+import { Readable } from 'stream';
 
 import { WorkerError } from '../main/errors.js';
+import { consumeChunkedStream } from '../shared/stream.js';
 
 const process = global.process;
+const socketFile = process.argv.at(-1) ?? '';
+if (!socketFile) {
+    throw new WorkerError('Socket file not specified');
+}
 
 // Runtime globals
 (global as any).process = undefined;
 (global as any).WebSocket = WebSocket as any;
+
+// const server = createServer(async client => {
+//     for await (const payload of consumeChunkedStream(client)) {
+//
+//     }
+// });
 
 try {
     const inputChunks: Buffer[] = [];
