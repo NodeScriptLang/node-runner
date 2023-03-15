@@ -7,10 +7,9 @@ import { NodeRunner } from '../main/NodeRunner.js';
 
 const runner = new NodeRunner({
     workDir: tmpdir(),
-    workerPoolSize: 2,
-    queueWaitTimeout: 50,
+    workerReadinessTimeout: 1000,
     workerKillTimeout: 1000,
-    workerRecycleThreshold: 5,
+    recycleThreshold: 5,
 });
 
 describe('NodeRunner', () => {
@@ -30,32 +29,33 @@ describe('NodeRunner', () => {
         assert.strictEqual(res, 'Hello, World');
     });
 
-    it('does not allow accessing process global', async () => {
-        const moduleUrl = codeToUrl(`export async function compute(params) { return "Process: " + typeof process }`);
+    it('does not allow accessing process env', async () => {
+        const moduleUrl = codeToUrl(`export async function compute(params) { return "Env: " + Object.keys(process.env).length }`);
         const res = await runner.compute({
             moduleUrl,
             params: {},
             timeout: 1000,
         });
-        assert.strictEqual(res, 'Process: undefined');
+        assert.strictEqual(res, 'Env: 0');
     });
 
     it('does not allow accessing process via constructor.constructor hack', async () => {
         const moduleUrl = codeToUrl(`
         export async function compute(params, ctx) {
-            const process = ctx.constructor.constructor("return process")();
-            return 'Process: '+ typeof process;
+            const env = ctx.constructor.constructor("return Object.keys(process.env).length")();
+            return 'Env: ' + env;
         }`);
         const res = await runner.compute({
             moduleUrl,
             params: {},
             timeout: 1000,
         });
-        assert.strictEqual(res, 'Process: undefined');
+        assert.strictEqual(res, 'Env: 0');
     });
 
-    it('evaluates more tasks then workers available', async () => {
-        const tasks = [1, 2, 3, 4, 5].map<ComputeTask>(i => {
+    it('evaluates tasks in parallel', async () => {
+        const range = [...new Array(10).keys()];
+        const tasks = range.map<ComputeTask>(i => {
             const moduleUrl = codeToUrl(`export async function compute(params) { return "Hello ${i}"; }`);
             return {
                 moduleUrl,
@@ -64,13 +64,7 @@ describe('NodeRunner', () => {
             };
         });
         const results = await Promise.all(tasks.map(_ => runner.compute(_)));
-        assert.deepEqual(results, [
-            'Hello 1',
-            'Hello 2',
-            'Hello 3',
-            'Hello 4',
-            'Hello 5',
-        ]);
+        assert.deepStrictEqual(results, range.map(i => `Hello ${i}`));
     });
 
 });
