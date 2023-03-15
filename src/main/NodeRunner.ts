@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { Event } from 'nanoevent';
 
 import { mkdir } from 'fs/promises';
 
@@ -21,6 +22,9 @@ export class NodeRunner {
     protected workerPromise: Promise<WorkerProcess> | null = null;
 
     tasksProcessed = 0;
+
+    onSpawn = new Event<void>();
+    onRecycle = new Event<void>();
 
     constructor(
         readonly config: WorkerQueueConfig,
@@ -50,6 +54,7 @@ export class NodeRunner {
             this.workerPromise = null;
             this.currentWorker = null;
             worker.scheduleTermination();
+            this.onRecycle.emit();
         }
         return await worker.compute(task);
     }
@@ -71,6 +76,7 @@ export class NodeRunner {
         const socketFile = path.join(this.config.workDir, id + '.sock');
         const worker = WorkerProcess.create(socketFile);
         await worker.waitForReady(this.config.workerReadinessTimeout);
+        this.onSpawn.emit();
         return worker;
     }
 
