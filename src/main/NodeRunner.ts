@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { Event } from 'nanoevent';
 
 import { mkdir } from 'fs/promises';
+import { Event } from 'nanoevent';
 
 import { ComputeTask } from './ComputeTask.js';
 import { WorkerProcess } from './WorkerProcess.js';
