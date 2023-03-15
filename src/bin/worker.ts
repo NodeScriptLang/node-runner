@@ -33,6 +33,7 @@ process.once('SIGTERM', () => {
 });
 
 async function serveClient(socket: Socket) {
+    const ctx = new GraphEvalContext();
     try {
         const payload = await readStream(socket);
         const {
@@ -40,7 +41,6 @@ async function serveClient(socket: Socket) {
             params,
         } = JSON.parse(payload);
         const { compute } = await import(moduleUrl);
-        const ctx = new GraphEvalContext();
         const result = await compute(params, ctx);
         const output = Buffer.from(JSON.stringify(result), 'utf-8');
         socket.end(output, () => socket.destroy());
@@ -50,6 +50,8 @@ async function serveClient(socket: Socket) {
             message: error.message,
             status: error.status,
         }), 'utf-8'), () => socket.destroy());
+    } finally {
+        await ctx.disposeAll();
     }
 }
 
