@@ -11,6 +11,7 @@ export interface WorkerQueueConfig {
     workerReadinessTimeout: number;
     workerKillTimeout: number;
     recycleThreshold: number;
+    retries: number;
 }
 
 /**
@@ -49,14 +50,28 @@ export class NodeRunner {
 
     async compute(task: ComputeTask) {
         this.tasksProcessed += 1;
-        const worker = await this.acquireWorker();
-        if (this.tasksProcessed % this.config.recycleThreshold === 0) {
-            this.workerPromise = null;
-            this.currentWorker = null;
-            worker.scheduleTermination();
-            this.onRecycle.emit();
+        for (let i = 0; i <= this.config.retries; i++) {
+            try {
+                const worker = await this.acquireWorker();
+                if (this.tasksProcessed % this.config.recycleThreshold === 0) {
+                    // Schedule this worker for termination,
+                    // the next task will be picked up by a different worker
+                    this.workerPromise = null;
+                    this.currentWorker = null;
+                    worker.scheduleTermination();
+                    this.onRecycle.emit();
+                }
+                return await worker.compute(task);
+            } catch (err: any) {
+                const socketFile = this.currentWorker?.socketFile;
+                if (err.code === 'ECONNREFUSED' && socketFile && err.message.includes(socketFile)) {
+                    this.workerPromise = null;
+                    this.currentWorker = null;
+                    continue;
+                }
+                throw err;
+            }
         }
-        return await worker.compute(task);
     }
 
     private acquireWorker(): Promise<WorkerProcess> {
@@ -77,6 +92,14 @@ export class NodeRunner {
         const worker = WorkerProcess.create(socketFile);
         await worker.waitForReady(this.config.workerReadinessTimeout);
         this.onSpawn.emit();
+        worker.onProcessExit.on(() => {
+            // If worker process exits and still active, it means it has crashed,
+            // so let's swap it out
+            if (this.currentWorker === worker) {
+                this.currentWorker = null;
+                this.workerPromise = null;
+            }
+        });
         return worker;
     }
 

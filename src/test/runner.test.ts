@@ -10,6 +10,7 @@ const runner = new NodeRunner({
     workerReadinessTimeout: 1000,
     workerKillTimeout: 1000,
     recycleThreshold: 5,
+    retries: 1,
 });
 
 describe('NodeRunner', () => {
