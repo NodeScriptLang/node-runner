@@ -34,6 +34,7 @@ process.once('SIGTERM', () => {
 
 async function serveClient(socket: Socket) {
     const ctx = new GraphEvalContext();
+    ctx.setLocal('ns:env', 'server');
     try {
         const payload = await readStream(socket);
         const {
