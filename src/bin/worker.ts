@@ -51,7 +51,7 @@ async function serveClient(socket: Socket) {
             status: error.status,
         }), 'utf-8'), () => socket.destroy());
     } finally {
-        await ctx.disposeAll();
+        await ctx.finalize();
     }
 }
 
