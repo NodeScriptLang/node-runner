@@ -1,3 +1,6 @@
 # Node.js Module Runner
 
-Allows executing
+**Status: experimental**
+
+Executes NodeScript modules in isolated subprocesses.
+
