@@ -65,7 +65,7 @@ export class WorkerProcess {
             this.waitForOutput(socket).then(value => {
                 clearTimeout(timer);
                 resolve(value);
-            });
+            }, error => reject(error));
             socket.once('error', error => {
                 clearTimeout(timer);
                 reject(error);
