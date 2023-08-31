@@ -3,3 +3,9 @@ export interface ComputeTask {
     params: any;
     timeout: number;
 }
+
+export interface ComputeResult {
+    result?: any;
+    error?: any;
+    profile?: any;
+}

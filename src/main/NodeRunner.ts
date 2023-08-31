@@ -3,7 +3,7 @@ import path from 'node:path';
 import { mkdir } from 'fs/promises';
 import { Event } from 'nanoevent';
 
-import { ComputeTask } from './ComputeTask.js';
+import { ComputeResult, ComputeTask } from './ComputeTask.js';
 import { WorkerProcess } from './WorkerProcess.js';
 
 export interface WorkerQueueConfig {
@@ -48,9 +48,10 @@ export class NodeRunner {
         await Promise.allSettled(promises);
     }
 
-    async compute(task: ComputeTask) {
+    async compute(task: ComputeTask): Promise<ComputeResult> {
         this.tasksProcessed += 1;
-        for (let i = 0; i <= this.config.retries; i++) {
+        let attempt = 0;
+        while (true) {
             try {
                 const worker = await this.acquireWorker();
                 if (this.tasksProcessed % this.config.recycleThreshold === 0) {
@@ -64,9 +65,10 @@ export class NodeRunner {
                 return await worker.compute(task);
             } catch (err: any) {
                 const socketFile = this.currentWorker?.socketFile;
-                if (err.code === 'ECONNREFUSED' && socketFile && err.message.includes(socketFile)) {
+                if (attempt < this.config.retries && err.code === 'ECONNREFUSED' && socketFile && err.message.includes(socketFile)) {
                     this.workerPromise = null;
                     this.currentWorker = null;
+                    attempt += 1;
                     continue;
                 }
                 throw err;

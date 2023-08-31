@@ -27,7 +27,10 @@ describe('NodeRunner', () => {
             },
             timeout: 1000,
         });
-        assert.strictEqual(res, 'Hello, World');
+        assert.deepStrictEqual(res, {
+            result: 'Hello, World',
+            profile: [],
+        });
     });
 
     it('does not allow accessing process env', async () => {
@@ -37,7 +40,10 @@ describe('NodeRunner', () => {
             params: {},
             timeout: 1000,
         });
-        assert.strictEqual(res, 'Env: 0');
+        assert.deepStrictEqual(res, {
+            result: 'Env: 0',
+            profile: [],
+        });
     });
 
     it('does not allow accessing process via constructor.constructor hack', async () => {
@@ -51,7 +57,10 @@ describe('NodeRunner', () => {
             params: {},
             timeout: 1000,
         });
-        assert.strictEqual(res, 'Env: 0');
+        assert.deepStrictEqual(res, {
+            result: 'Env: 0',
+            profile: [],
+        });
     });
 
     it('evaluates tasks in parallel', async () => {
@@ -65,7 +74,7 @@ describe('NodeRunner', () => {
             };
         });
         const results = await Promise.all(tasks.map(_ => runner.compute(_)));
-        assert.deepStrictEqual(results, range.map(i => `Hello ${i}`));
+        assert.deepStrictEqual(results.map(_ => _.result), range.map(i => `Hello ${i}`));
     });
 
 });

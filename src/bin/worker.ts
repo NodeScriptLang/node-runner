@@ -1,6 +1,6 @@
 import { createServer, Socket } from 'node:net';
 
-import { GraphEvalContext } from '@nodescript/core/runtime';
+import { GraphEvalContext, InMemoryGraphProfiler } from '@nodescript/core/runtime';
 import WebSocket from 'isomorphic-ws';
 
 import { WorkerError } from '../main/errors.js';
@@ -33,7 +33,9 @@ process.once('SIGTERM', () => {
 });
 
 async function serveClient(socket: Socket) {
+    const profiler = new InMemoryGraphProfiler();
     const ctx = new GraphEvalContext();
+    ctx.profiler = profiler;
     ctx.setLocal('ns:env', 'server');
     try {
         const payload = await readStream(socket);
@@ -43,13 +45,19 @@ async function serveClient(socket: Socket) {
         } = JSON.parse(payload);
         const { compute } = await import(moduleUrl);
         const result = await compute(params, ctx);
-        const output = Buffer.from(JSON.stringify(result), 'utf-8');
+        const output = Buffer.from(JSON.stringify({
+            result,
+            profile: profiler.spans,
+        }), 'utf-8');
         socket.end(output, () => socket.destroy());
     } catch (error: any) {
         socket.end(Buffer.from(JSON.stringify({
-            name: error.name,
-            message: error.message,
-            status: error.status,
+            error: {
+                name: error.name,
+                message: error.message,
+                status: error.status,
+            },
+            profile: profiler.spans,
         }), 'utf-8'), () => socket.destroy());
     } finally {
         await ctx.finalize();

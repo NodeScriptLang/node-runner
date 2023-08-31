@@ -4,7 +4,7 @@ import { createConnection, Socket } from 'node:net';
 
 import { Event } from 'nanoevent';
 
-import { ComputeTask } from './ComputeTask.js';
+import { ComputeResult, ComputeTask } from './ComputeTask.js';
 import { ComputeTimeoutError, InvalidStateError, WorkerError } from './errors.js';
 
 export class WorkerProcess {
@@ -48,14 +48,14 @@ export class WorkerProcess {
         });
     }
 
-    async compute(task: ComputeTask) {
+    async compute(task: ComputeTask): Promise<ComputeResult> {
         if (this.process.killed) {
             throw new InvalidStateError('Worker has been destroyed');
         }
         this.pendingTasks += 1;
         const { moduleUrl, params, timeout } = task;
         const socket = await this.connect();
-        return new Promise((resolve, reject) => {
+        return new Promise<ComputeResult>((resolve, reject) => {
             const payload = Buffer.from(JSON.stringify({ moduleUrl, params }), 'utf-8');
             socket.end(payload);
             const timer = setTimeout(() => {
@@ -84,7 +84,7 @@ export class WorkerProcess {
         });
     }
 
-    private async waitForOutput(socket: Socket) {
+    private async waitForOutput(socket: Socket): Promise<ComputeResult> {
         const chunks: Buffer[] = [];
         for await (const chunk of socket) {
             chunks.push(chunk);
