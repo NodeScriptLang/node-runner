@@ -1,6 +1,6 @@
 {
     "name": "@nodescript/node-runner",
-    "version": "2.9.1",
+    "version": "2.9.2",
     "description": "Node.js Module Runner",
     "type": "module",
     "sideEffects": false,
