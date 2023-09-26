@@ -1,23 +1,24 @@
 import { createServer, Socket } from 'node:net';
 
 import { GraphEvalContext, InMemoryGraphProfiler } from '@nodescript/core/runtime';
-import WebSocket from 'isomorphic-ws';
 
 import { WorkerError } from '../main/errors.js';
 
 const process = global.process;
+const console = global.console;
 const socketFile = process.argv.at(-1) ?? '';
 if (!socketFile) {
     throw new WorkerError('Socket file not specified');
 }
 
 // Runtime globals
-(globalThis as any).process = {
-    // Note: those are required by isomorphic-ws
-    env: {},
-    nextTick,
-};
-(globalThis as any).WebSocket = WebSocket as any;
+Object.assign(globalThis, {
+    process: {
+        env: {},
+        nextTick,
+    },
+    console: getConsoleStub(),
+});
 
 // IPC server
 const server = createServer({
@@ -82,4 +83,12 @@ async function readStream(socket: Socket): Promise<string> {
 
 function nextTick(callback: Function, ...args: any[]) {
     process.nextTick(callback, ...args);
+}
+
+function getConsoleStub() {
+    const stub: any = {};
+    for (const k of Object.keys(console)) {
+        stub[k] = () => {};
+    }
+    return stub;
 }
