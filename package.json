@@ -43,7 +43,7 @@
         "typescript": "^4.9.5"
     },
     "dependencies": {
-        "@nodescript/core": "^7.16.0",
+        "@nodescript/core": "^7.16.1",
         "nanoevent": "^1.0.0"
     }
 }
